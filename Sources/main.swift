@@ -20,66 +20,85 @@
 import PerfectLib
 import PerfectHTTP
 import PerfectHTTPServer
+import PerfectMustache
+import PerfectLogger
+import PerfectRequestLogger
+import Foundation
+import StORM
 
-// An example request handler.
-// This 'handler' function can be referenced directly in the configuration below.
-func handler(data: [String:Any]) throws -> RequestHandler {
-	return {
-		request, response in
-		// Respond with a simple message.
-		response.setHeader(.contentType, value: "text/html")
-		response.appendBody(string: "<html><title>Hello, world!</title><body>Hello, world!</body></html>")
-		// Ensure that response.completed() is called when your processing is done.
-		response.completed()
-	}
+
+struct HomeMustacheHandler: MustachePageHandler { // 所有目标句柄都必须从PageHandler对象继承
+    // 以下句柄函数必须在程序中实现
+    // 当句柄需要将参数值传入模板时会被系统调用。
+    // - 参数 context 上下文环境：类型为MustacheWebEvaluationContext，为程序内读取HTTPRequest请求内容而保存的所有信息
+    // - 参数 collector 结果搜集器：类型为MustacheEvaluationOutputCollector，用于调整模板输出。比如一个`defaultEncodingFunc`默认编码函数将被安装用于改变输出结果的编码方式。
+    func extendValuesForResponse(context contxt: MustacheWebEvaluationContext, collector: MustacheEvaluationOutputCollector) {
+        var values = MustacheEvaluationContext.MapType()
+        values["title"] = "swift用户"
+        /// 等等等等
+        contxt.extendValues(with: values)
+        do {
+            try contxt.requestCompleted(withCollector: collector)
+        } catch {
+            let response = contxt.webResponse
+            response.status = .internalServerError
+            response.appendBody(string: "\(error)")
+            response.completed()
+        }
+    }
 }
 
-// Configuration data for two example servers.
-// This example configuration shows how to launch one or more servers 
-// using a configuration dictionary.
+//router
+var homeHandler:RequestHandler = { request, response in
+    let webRoot = request.documentRoot
+    mustacheRequest(request: request, response: response, handler: HomeMustacheHandler(), templatePath: webRoot + "/index.html")
+}
 
-let port1 = 8080, port2 = 8181
+var loginHandler:RequestHandler = { request, response in
+    guard let userName = request.param(name: "userName") else {
+        return
+    }
+    guard let password = request.param(name: "password") else {
+        return
+    }
+    let resultDic:[String:Any] = ["responseBody":["userName":userName, "password":password, "result":"SUCCESS", "resultMsg":"login request success"]]
+    do {
+        let json = try resultDic.jsonEncodedString()
+        response.setBody(string: json)
+    } catch {
+        var errMsg = "json convert error"
+        response.setBody(string: errMsg)
+    }
+    response.completed()
+}
 
-let confData = [
-	"servers": [
-		// Configuration data for one server which:
-		//	* Serves the hello world message at <host>:<port>/
-		//	* Serves static files out of the "./webroot"
-		//		directory (which must be located in the current working directory).
-		//	* Performs content compression on outgoing data when appropriate.
-		[
-			"name":"localhost",
-			"port":port1,
-			"routes":[
-				["method":"get", "uri":"/", "handler":handler],
-				["method":"get", "uri":"/**", "handler":PerfectHTTPServer.HTTPHandler.staticFiles,
-				 "documentRoot":"./webroot",
-				 "allowResponseFilters":true]
-			],
-			"filters":[
-				[
-				"type":"response",
-				"priority":"high",
-				"name":PerfectHTTPServer.HTTPFilter.contentCompression,
-				]
-			]
-		],
-		// Configuration data for another server which:
-		//	* Redirects all traffic back to the first server.
-		[
-			"name":"localhost",
-			"port":port2,
-			"routes":[
-				["method":"get", "uri":"/**", "handler":PerfectHTTPServer.HTTPHandler.redirect,
-				 "base":"http://localhost:\(port1)"]
-			]
-		]
-	]
-]
+var createHandler:RequestHandler = { request, response in
+    guard let userName = request.param(name: "userName") else {
+        response.completed()
+        return
+    }
+    guard let password = request.param(name: "password") else {
+        response.completed()
+        return
+    }
+    let userToCreate = User()
+    userToCreate.userName = userName
+    userToCreate.password = password
+    do {try userToCreate.save()} catch {fatalError("\(error)")}
+}
 
+var server = HTTPServer()
+configureLog()
+server.serverPort = 8181
+server.serverAddress = "127.0.0.1"
+var routes = Routes()
+routes.add(method: .post, uri: "/login", handler: loginHandler)
+routes.add(method: .get, uri: "/", handler: homeHandler)
+server.addRoutes(routes)
+server.setLogFilters()
+testMysql()
 do {
-	// Launch the servers based on the configuration data.
-	try HTTPServer.launch(configurationData: confData)
+    try server.start()
 } catch {
 	fatalError("\(error)") // fatal error launching one of the servers
 }

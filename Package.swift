@@ -20,9 +20,14 @@
 import PackageDescription
 
 let package = Package(
-	name: "PerfectTemplate",
+	name: "swift_server_demo",
 	targets: [],
 	dependencies: [
-		.Package(url: "https://github.com/PerfectlySoft/Perfect-HTTPServer.git", majorVersion: 2)
+        .Package(url: "https://github.com/PerfectlySoft/Perfect-HTTPServer.git", majorVersion: 2),//http server
+        .Package(url: "https://github.com/PerfectlySoft/Perfect-Mustache.git", majorVersion: 2), //页面模版
+        .Package(url: "https://github.com/PerfectlySoft/Perfect-RequestLogger.git", majorVersion: 1), //请求日志过滤器
+        .Package(url: "https://github.com/PerfectlySoft/Perfect-Logger.git", majorVersion: 1), //日志写入文件
+        .Package(url: "https://github.com/PerfectlySoft/Perfect-MySQL.git", majorVersion: 2),   //数据库
+        .Package(url: "https://github.com/SwiftORM/MySQL-StORM", majorVersion:1)               //orm
     ]
 )
